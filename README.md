@@ -27,3 +27,39 @@ Or simply click:
 ## Thanks
 
 Thanks to [Harish](https://harishgarg.com) for the [inspiration to create a FastAPI quickstart for Render](https://twitter.com/harishkgarg/status/1435084018677010434) and for some sample code!
+
+## Data export / download (for TAs & Tren)
+
+The EmoGo backend exposes a data-export page that lets TAs and Tren view and download the three types of data collected by the frontend: vlogs, sentiments, and GPS coordinates.
+
+- **Export page (will be assigned by Render after deployment):**
+
+    `https://<your-render-service>.onrender.com/export`
+
+- **Direct download endpoints (replace the host with your service domain):**
+    - `/export/vlogs` — downloads `vlogs.json`
+    - `/export/sentiments` — downloads `sentiments.json`
+    - `/export/gps` — downloads `gps.json`
+
+Each endpoint returns a JSON array of documents from the corresponding MongoDB collection. Example curl command to download the vlogs file (saves with the server-provided filename):
+
+```powershell
+curl -O -J https://<your-render-service>.onrender.com/export/vlogs
+```
+
+Deploying on Render
+- Add `render.yaml` to the repository (already provided) so Render can use this spec when creating the service.
+- In the Render dashboard, create a new Web Service and connect the repository. Set these environment variables in the service settings:
+  - `MONGO_URI` (e.g., `mongodb://username:password@host:port`)
+  - `MONGO_DB` (e.g., `emogo`)
+- Start command (Render uses this when launching the service):
+
+```shell
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+After the service is created and a deployment succeeds, Render will assign a public domain such as `https://my-service.onrender.com`. Replace `https://<your-render-service>.onrender.com` above with your actual service URL and commit the change to this README so TAs and Tren can access the export page.
+
+Want me to deploy? I can perform the deployment for you if you provide a Render API key and grant access to the repository (or give me temporary credentials). If you prefer to deploy it yourself, follow the Render UI steps above — the `render.yaml` in this repo will be used by Render when creating the service.
+
+The app reads MongoDB connection info from the `MONGO_URI` environment variable (default: `mongodb://localhost:27017`) and the database name from `MONGO_DB` (default: `emogo`).
