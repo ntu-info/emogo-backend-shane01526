@@ -1,9 +1,14 @@
 services:
-  # A Docker web service
   - type: web
-    name: fastapi-example
+    name: emogo-backend-shane01526
     runtime: python
     plan: free
-    autoDeploy: false
+    autoDeploy: true
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: MONGO_URI
+        value: ""
+      - key: MONGO_DB
+        value: "emogo"
