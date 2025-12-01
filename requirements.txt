@@ -1,1 +1,4 @@
 fastapi[all]
+motor
+uvicorn
+httpx
