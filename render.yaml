@@ -9,6 +9,6 @@ services:
     healthCheckPath: /
     envVars:
       - key: MONGO_URI
-        value: ""
+        value: false
       - key: MONGO_DB
         value: "emogo"
