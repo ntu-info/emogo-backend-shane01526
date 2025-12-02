@@ -11,4 +11,4 @@ services:
       - key: MONGO_URI
         value: false
       - key: MONGO_DB
-        value: "emogo"
+        value: "emogo_database"
