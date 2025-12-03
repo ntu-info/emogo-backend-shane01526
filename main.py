@@ -805,7 +805,10 @@ async def export_index():
                             }
                             return '#' + (i + 1);
                         });
-                        const scores = sentiments.map(s => s.score || s.value || s.polarity || 0);
+                        const scores = sentiments.map(s => {
+                            const score = s.score || s.value || s.polarity || 0;
+                            return typeof score === 'number' ? score : 0;
+                        });
                         
                         const ctx = document.getElementById('sentimentChart').getContext('2d');
                         new Chart(ctx, {
@@ -849,16 +852,20 @@ async def export_index():
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${sentiments.map((s, i) => `
+                                    ${sentiments.map((s, i) => {
+                                        const score = s.score || s.value || s.polarity || 0;
+                                        const scoreStr = typeof score === 'number' ? score.toFixed(2) : score;
+                                        return `
                                         <tr>
                                             <td>${i + 1}</td>
                                             <td>${s.sentiment || '-'}</td>
-                                            <td>${(s.score || s.value || s.polarity || 0).toFixed(2)}</td>
+                                            <td>${scoreStr}</td>
                                             <td>${s.text || '-'}</td>
                                             <td>${s.userId || '-'}</td>
                                             <td>${s.timestamp ? new Date(s.timestamp).toLocaleString('zh-TW') : '-'}</td>
                                         </tr>
-                                    `).join('')}
+                                        `;
+                                    }).join('')}
                                 </tbody>
                             </table>
                         `;
@@ -915,10 +922,12 @@ async def export_index():
                             coords.forEach((c, i) => {
                                 const marker = L.marker([c.lat, c.lng]).addTo(mapInstance);
                                 const timestamp = c.data.timestamp ? new Date(c.data.timestamp).toLocaleString('zh-TW') : '未知時間';
+                                const latStr = typeof c.lat === 'number' ? c.lat.toFixed(6) : c.lat;
+                                const lngStr = typeof c.lng === 'number' ? c.lng.toFixed(6) : c.lng;
                                 marker.bindPopup(`
                                     <strong>位置 #${i + 1}</strong><br>
-                                    經度: ${c.lng.toFixed(6)}<br>
-                                    緯度: ${c.lat.toFixed(6)}<br>
+                                    經度: ${lngStr}<br>
+                                    緯度: ${latStr}<br>
                                     時間: ${timestamp}
                                 `);
                             });
