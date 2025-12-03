@@ -271,206 +271,265 @@ ALLOWED_EXPORTS = {"vlogs", "sentiments", "gps"}
 
 @app.get("/export", response_class=HTMLResponse)
 async def export_index():
-    """Interactive HTML page listing and visualizing the available exports."""
+    """Interactive HTML page with download buttons for all data types."""
     html = """
 <!doctype html>
 <html>
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>EmoGo Data Export & Viewer</title>
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <title>EmoGo Data Export</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 16px; }
-            .status { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
-            .status.ok { background: #d4edda; color: #155724; }
-            .status.error { background: #f8d7da; color: #721c24; }
-            nav { margin-bottom: 12px; }
-            .tab { display:inline-block; margin-right:8px; padding:6px 10px; background:#eee; cursor:pointer; border-radius:4px; }
-            .tab.active { background:#1976d2; color:#fff; }
-            .panel { display:none; margin-top:12px; }
-            .panel.active { display:block; }
-            #map { height: 400px; }
-            table { border-collapse: collapse; width: 100%; }
-            th, td { border: 1px solid #ddd; padding: 6px; }
-            pre.raw { background:#f7f7f7; padding:8px; overflow:auto; max-height:300px; }
+            * { box-sizing: border-box; }
+            body { 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+            .container {
+                max-width: 900px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 12px;
+                padding: 32px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            }
+            h1 {
+                color: #333;
+                margin: 0 0 12px 0;
+                font-size: 32px;
+            }
+            .subtitle {
+                color: #666;
+                margin-bottom: 32px;
+                font-size: 16px;
+            }
+            .status { 
+                padding: 16px; 
+                margin-bottom: 24px; 
+                border-radius: 8px; 
+                border-left: 4px solid;
+            }
+            .status.ok { 
+                background: #d4edda; 
+                color: #155724; 
+                border-color: #28a745;
+            }
+            .status.error { 
+                background: #f8d7da; 
+                color: #721c24; 
+                border-color: #dc3545;
+            }
+            .card {
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 24px;
+                margin-bottom: 20px;
+                border: 1px solid #e0e0e0;
+            }
+            .card h2 {
+                margin: 0 0 12px 0;
+                color: #333;
+                font-size: 22px;
+                display: flex;
+                align-items: center;
+            }
+            .card-icon {
+                width: 40px;
+                height: 40px;
+                margin-right: 12px;
+                background: white;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+            }
+            .card-desc {
+                color: #666;
+                margin-bottom: 20px;
+                font-size: 14px;
+            }
+            .download-btn {
+                display: inline-block;
+                padding: 12px 24px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                text-decoration: none;
+                border-radius: 6px;
+                font-weight: 600;
+                transition: all 0.3s;
+                margin-right: 12px;
+                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            }
+            .download-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+            }
+            .download-btn.secondary {
+                background: #6c757d;
+                box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+            }
+            .download-btn.secondary:hover {
+                box-shadow: 0 6px 16px rgba(108, 117, 125, 0.5);
+            }
+            .stats {
+                display: flex;
+                gap: 16px;
+                margin-top: 16px;
+            }
+            .stat-box {
+                flex: 1;
+                background: white;
+                padding: 12px;
+                border-radius: 6px;
+                text-align: center;
+            }
+            .stat-number {
+                font-size: 24px;
+                font-weight: 700;
+                color: #667eea;
+            }
+            .stat-label {
+                font-size: 12px;
+                color: #666;
+                text-transform: uppercase;
+                margin-top: 4px;
+            }
+            .footer {
+                text-align: center;
+                color: #666;
+                margin-top: 32px;
+                padding-top: 24px;
+                border-top: 1px solid #e0e0e0;
+                font-size: 14px;
+            }
+            .loading {
+                display: inline-block;
+                width: 16px;
+                height: 16px;
+                border: 2px solid #f3f3f3;
+                border-top: 2px solid #667eea;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin-left: 8px;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
         </style>
     </head>
     <body>
-        <h1>EmoGo Data Export & Viewer</h1>
-        <div id="status" class="status">Checking connection...</div>
-        <p>Interactive viewer — examine and download collected vlogs, sentiments, and GPS coordinates.</p>
+        <div class="container">
+            <h1>🎥 EmoGo Data Export</h1>
+            <div class="subtitle">下載您收集的所有 vlogs、情緒分析和 GPS 資料</div>
+            
+            <div id="status" class="status">
+                <span>正在檢查連線狀態...</span>
+                <div class="loading"></div>
+            </div>
 
-        <nav>
-            <span class="tab active" data-tab="vlogs">Vlogs</span>
-            <span class="tab" data-tab="sentiments">Sentiments</span>
-            <span class="tab" data-tab="gps">GPS</span>
-            <a style="margin-left:12px" href="/export/vlogs">Download vlogs (JSON)</a>
-            <a style="margin-left:8px" href="/export/sentiments">Download sentiments (JSON)</a>
-            <a style="margin-left:8px" href="/export/gps">Download gps (JSON)</a>
-        </nav>
+            <div class="card">
+                <h2>
+                    <div class="card-icon">🎬</div>
+                    Vlogs (影片檔案)
+                </h2>
+                <div class="card-desc">下載所有錄製的影片檔案，包含完整的 metadata 和媒體內容</div>
+                <div id="vlogStats" class="stats" style="display:none;">
+                    <div class="stat-box">
+                        <div class="stat-number" id="vlogCount">-</div>
+                        <div class="stat-label">影片數量</div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <a href="/export/vlogs/zip" class="download-btn" download>
+                        📦 下載 MP4 影片壓縮檔 (.zip)
+                    </a>
+                    <a href="/export/vlogs" class="download-btn secondary" download>
+                        📄 下載 JSON 資料
+                    </a>
+                </div>
+            </div>
 
-        <div id="vlogs" class="panel active">
-            <h2>Vlogs</h2>
-            <div id="vlogsList">Loading...</div>
+            <div class="card">
+                <h2>
+                    <div class="card-icon">😊</div>
+                    Sentiments (情緒分析)
+                </h2>
+                <div class="card-desc">下載情緒分析結果，包含分數、情緒類型和時間戳記</div>
+                <div id="sentimentStats" class="stats" style="display:none;">
+                    <div class="stat-box">
+                        <div class="stat-number" id="sentimentCount">-</div>
+                        <div class="stat-label">記錄數量</div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <a href="/export/sentiments" class="download-btn" download>
+                        📊 下載情緒資料 (.json)
+                    </a>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>
+                    <div class="card-icon">📍</div>
+                    GPS (位置座標)
+                </h2>
+                <div class="card-desc">下載所有 GPS 位置記錄，包含經緯度和準確度資訊</div>
+                <div id="gpsStats" class="stats" style="display:none;">
+                    <div class="stat-box">
+                        <div class="stat-number" id="gpsCount">-</div>
+                        <div class="stat-label">位置點數</div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <a href="/export/gps" class="download-btn" download>
+                        🗺️ 下載 GPS 資料 (.json)
+                    </a>
+                </div>
+            </div>
+
+            <div class="footer">
+                <p>💡 提示：ZIP 檔案包含所有影片和完整的 manifest.json</p>
+                <p>如有問題，請聯繫系統管理員</p>
+            </div>
         </div>
 
-        <div id="sentiments" class="panel">
-            <h2>Sentiments</h2>
-            <canvas id="sentimentChart" height="120"></canvas>
-            <h3>All records</h3>
-            <div id="sentimentsTable">Loading...</div>
-        </div>
-
-        <div id="gps" class="panel">
-            <h2>GPS Coordinates</h2>
-            <div id="map"></div>
-            <h3>All records</h3>
-            <div id="gpsTable">Loading...</div>
-        </div>
-
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
-            // Check backend status
+            // Check backend status and display stats
             fetch('/').then(r => r.json()).then(data => {
                 const statusDiv = document.getElementById('status');
                 if (data.status === 'ok') {
                     statusDiv.className = 'status ok';
-                    statusDiv.innerHTML = '✅ Backend connected to database<br>' + 
-                        'Collections: ' + JSON.stringify(data.collections);
+                    statusDiv.innerHTML = '✅ 後端已連接到資料庫';
+                    
+                    // Show stats
+                    if (data.collections) {
+                        if (data.collections.vlogs !== undefined) {
+                            document.getElementById('vlogStats').style.display = 'flex';
+                            document.getElementById('vlogCount').textContent = data.collections.vlogs;
+                        }
+                        if (data.collections.sentiments !== undefined) {
+                            document.getElementById('sentimentStats').style.display = 'flex';
+                            document.getElementById('sentimentCount').textContent = data.collections.sentiments;
+                        }
+                        if (data.collections.gps !== undefined) {
+                            document.getElementById('gpsStats').style.display = 'flex';
+                            document.getElementById('gpsCount').textContent = data.collections.gps;
+                        }
+                    }
                 } else {
                     statusDiv.className = 'status error';
-                    statusDiv.innerHTML = '❌ ' + (data.error || 'Database not connected') + 
-                        '<br>Note: ' + (data.note || 'Check MongoDB configuration');
+                    statusDiv.innerHTML = '❌ 資料庫未連接<br>' + 
+                        '<small>錯誤: ' + (data.error || data.note || '未知錯誤') + '</small>';
                 }
             }).catch(e => {
-                document.getElementById('status').innerHTML = '❌ Failed to reach backend: ' + e.message;
-                document.getElementById('status').className = 'status error';
-            });
-
-            // Tab handling
-            document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-                document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
-                t.classList.add('active');
-                const panel = document.getElementById(t.dataset.tab);
-                if (panel) panel.classList.add('active');
-            }));
-
-            async function fetchJson(path){
-                const r = await fetch(path, { cache: 'no-store' });
-                if(!r.ok) throw new Error('Failed to fetch '+path+' ('+r.status+')');
-                return r.json();
-            }
-
-            function renderRawList(container, docs){
-                if(!docs || docs.length===0){ container.innerHTML = '<em>No records</em>'; return; }
-                const wrapper = document.createElement('div');
-                docs.forEach(d => {
-                    const pre = document.createElement('pre'); pre.className='raw'; pre.textContent = JSON.stringify(d, null, 2);
-                    wrapper.appendChild(pre);
-                });
-                container.innerHTML = ''; container.appendChild(wrapper);
-            }
-
-            function renderTable(container, docs, keys){
-                if(!docs || docs.length===0){ container.innerHTML = '<em>No records</em>'; return; }
-                const table = document.createElement('table');
-                const thead = document.createElement('thead');
-                const trh = document.createElement('tr');
-                keys.forEach(k=>{ const th=document.createElement('th'); th.textContent=k; trh.appendChild(th); });
-                thead.appendChild(trh); table.appendChild(thead);
-                const tbody = document.createElement('tbody');
-                docs.forEach(d=>{
-                    const tr = document.createElement('tr');
-                    keys.forEach(k=>{
-                        const td = document.createElement('td'); td.textContent = (d[k]!==undefined?String(d[k]):''); tr.appendChild(td);
-                    });
-                    tbody.appendChild(tr);
-                });
-                table.appendChild(tbody); container.innerHTML=''; container.appendChild(table);
-            }
-
-            // Vlogs
-            fetchJson('/export/vlogs').then(docs => {
-                const el = document.getElementById('vlogsList');
-                if(!docs || docs.length===0){ el.innerHTML='<em>No vlogs</em>'; return; }
-                const list = document.createElement('div');
-                docs.forEach((doc, i) => {
-                    const div = document.createElement('div'); div.style.padding='8px'; div.style.borderBottom='1px solid #eee';
-                    const title = document.createElement('div'); title.innerHTML = '<strong>Record '+(i+1)+'</strong>';
-                    div.appendChild(title);
-                    const mediaUrl = doc.media_url || doc.video_url || doc.audio_url || doc.url;
-                    if(mediaUrl){
-                        try{
-                            const lower = String(mediaUrl).toLowerCase();
-                            if(lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.includes('video')){
-                                const vid = document.createElement('video'); vid.controls = true; vid.src = mediaUrl; vid.style.maxWidth='100%'; vid.style.display='block'; vid.style.marginTop='6px'; div.appendChild(vid);
-                            } else if(lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.includes('audio')){
-                                const aud = document.createElement('audio'); aud.controls = true; aud.src = mediaUrl; aud.style.display='block'; aud.style.marginTop='6px'; div.appendChild(aud);
-                            } else {
-                                const a = document.createElement('a'); a.href = mediaUrl; a.target = '_blank'; a.textContent = 'Open media'; a.style.display='inline-block'; a.style.marginTop='6px'; div.appendChild(a);
-                            }
-                            const zipLink = document.createElement('a'); zipLink.href = '/export/vlogs/zip'; zipLink.style.marginLeft='12px'; zipLink.textContent = 'Download media ZIP'; div.appendChild(zipLink);
-                        }catch(e){ }
-                    }
-                    const body = document.createElement('pre'); body.className='raw'; body.textContent = JSON.stringify(doc, null, 2);
-                    div.appendChild(body); list.appendChild(div);
-                });
-                el.innerHTML=''; el.appendChild(list);
-            }).catch(e=>{ document.getElementById('vlogsList').textContent = 'Error: ' + e.message; });
-
-            // Sentiments
-            fetchJson('/export/sentiments').then(docs => {
-                const ct = document.getElementById('sentimentsTable');
-                if(!docs || docs.length===0){ 
-                    ct.innerHTML='<em>No sentiments</em>'; 
-                    document.getElementById('sentimentChart').style.display = 'none';
-                    return; 
-                }
-                const scoreKeyCandidates = ['score','sentiment','value','polarity'];
-                let key = null;
-                for(const k of scoreKeyCandidates){ if(docs[0] && docs[0][k]!==undefined){ key=k; break; } }
-                if(!key){ for(const k of Object.keys(docs[0])){ if(typeof docs[0][k] === 'number'){ key=k; break; } } }
-                if(!key){ renderRawList(ct, docs); return; }
-                const labels = docs.map((d, i)=> d.timestamp || d.time || i+1);
-                const data = docs.map(d=> Number(d[key] || 0));
-                const ctx = document.getElementById('sentimentChart').getContext('2d');
-                new Chart(ctx, { type: 'line', data: { labels, datasets:[{label: key, data, borderColor:'#1976d2', fill:false}] }, options:{responsive:true} });
-                const keys = ['timestamp', key, 'userId'];
-                renderTable(ct, docs, keys);
-            }).catch(e=>{ document.getElementById('sentimentsTable').textContent = 'Error: ' + e.message; });
-
-            // GPS
-            fetchJson('/export/gps').then(docs => {
-                const ct = document.getElementById('gpsTable');
-                if(!docs || docs.length===0){ 
-                    ct.innerHTML='<em>No GPS records</em>'; 
-                    document.getElementById('map').innerHTML = '<p>No GPS data available</p>';
-                    return; 
-                }
-                const coords = [];
-                docs.forEach(d=>{
-                    let lat=null, lng=null;
-                    if(d.latitude!==undefined && d.longitude!==undefined){ lat=d.latitude; lng=d.longitude; }
-                    else if(d.lat!==undefined && d.lon!==undefined){ lat=d.lat; lng=d.lon; }
-                    else if(d.lat!==undefined && d.lng!==undefined){ lat=d.lat; lng=d.lng; }
-                    else if(d.coords && Array.isArray(d.coords)){ lat = d.coords[0]; lng = d.coords[1]; }
-                    else if(d.location && d.location.latitude!==undefined){ lat=d.location.latitude; lng=d.location.longitude; }
-                    if(lat!==null && lng!==null){ coords.push({lat:Number(lat), lng:Number(lng), raw:d}); }
-                });
-                renderRawList(ct, docs);
-                if(coords.length>0){
-                    const map = L.map('map').setView([coords[0].lat, coords[0].lng], 12);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-                    coords.forEach(c => L.marker([c.lat, c.lng]).addTo(map).bindPopup('<pre>'+JSON.stringify(c.raw,null,2)+'</pre>'));
-                } else {
-                    document.getElementById('map').innerHTML = '<p>No valid lat/lng fields found in GPS records.</p>';
-                }
-            }).catch(e=>{ 
-                document.getElementById('gpsTable').textContent = 'Error: ' + e.message; 
-                document.getElementById('map').innerHTML = '<p>Error loading GPS data</p>';
+                const statusDiv = document.getElementById('status');
+                statusDiv.innerHTML = '❌ 無法連接到後端: ' + e.message;
+                statusDiv.className = 'status error';
             });
         </script>
     </body>
@@ -481,40 +540,70 @@ async def export_index():
 
 @app.get("/export/vlogs/zip")
 async def export_vlogs_zip():
-    """Download a ZIP archive containing media files referenced by vlogs and a manifest."""
+    """Download a ZIP archive containing all media files and a manifest."""
     if db is None:
         raise HTTPException(status_code=503, detail="Database not connected")
 
     docs = await db['vlogs'].find({}).to_list(length=None)
 
     buf = BytesIO()
-    with zipfile.ZipFile(buf, 'w') as zf:
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # Write manifest
         try:
-            zf.writestr('manifest.json', json.dumps(docs, default=str))
-        except Exception:
-            zf.writestr('manifest.json', '[]')
+            manifest_data = json.dumps(docs, default=str, indent=2)
+            zf.writestr('manifest.json', manifest_data)
+        except Exception as e:
+            zf.writestr('manifest.json', f'{{"error": "Failed to create manifest", "details": "{str(e)}"}}')
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Download and add media files
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
             for idx, doc in enumerate(docs, start=1):
+                # Try to find media URL
                 url = None
                 for k in ('media_url', 'video_url', 'audio_url', 'url'):
                     if isinstance(doc.get(k), str) and doc.get(k).strip():
                         url = doc.get(k).strip()
                         break
+                
                 if not url:
                     continue
+                
                 try:
+                    print(f"Downloading media {idx}/{len(docs)}: {url}")
                     resp = await client.get(url)
+                    
                     if resp.status_code == 200:
+                        # Generate filename
                         parts = url.split('?')[0].split('/')
-                        fname = parts[-1] or f'media_{idx}'
-                        fname = fname.replace('\n', '_').replace('\r', '_')
-                        zf.writestr(fname, resp.content)
-                except Exception:
+                        fname = parts[-1] if parts[-1] else f'media_{idx}'
+                        
+                        # Ensure extension
+                        if '.' not in fname:
+                            fname += '.mp4'
+                        
+                        # Clean filename
+                        fname = fname.replace('\n', '_').replace('\r', '_').replace('/', '_').replace('\\', '_')
+                        
+                        # Add timestamp to avoid duplicates
+                        timestamp = doc.get('timestamp', '').replace(':', '-').replace('.', '-')[:19]
+                        if timestamp:
+                            name_parts = fname.rsplit('.', 1)
+                            fname = f"{name_parts[0]}_{timestamp}.{name_parts[1]}" if len(name_parts) == 2 else f"{fname}_{timestamp}"
+                        
+                        zf.writestr(f"videos/{fname}", resp.content)
+                        print(f"✓ Added {fname} ({len(resp.content)} bytes)")
+                    else:
+                        print(f"✗ Failed to download {url}: HTTP {resp.status_code}")
+                        
+                except Exception as e:
+                    print(f"✗ Error downloading {url}: {str(e)}")
                     continue
 
     buf.seek(0)
-    headers = {"Content-Disposition": 'attachment; filename="vlogs_media.zip"'}
+    headers = {
+        "Content-Disposition": 'attachment; filename="emogo_vlogs.zip"',
+        "Content-Type": "application/zip"
+    }
     return StreamingResponse(buf, media_type='application/zip', headers=headers)
 
 
@@ -542,9 +631,12 @@ async def export_kind(kind: str):
         cursor = db[kind].find({})
         docs = await cursor.to_list(length=None)
         docs = [_make_serializable(d) for d in docs]
-        content = json.dumps(docs, default=str)
-        filename = f"{kind}.json"
-        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        content = json.dumps(docs, default=str, indent=2)
+        filename = f"emogo_{kind}.json"
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "application/json"
+        }
         return Response(content, media_type="application/json", headers=headers)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to export {kind}: {str(e)}")
