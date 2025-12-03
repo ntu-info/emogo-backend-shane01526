@@ -57,6 +57,7 @@ class GPSData(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     lng: Optional[float] = None
+    long: Optional[float] = None
     coords: Optional[List[float]] = None
     userId: Optional[str] = None
     timestamp: Optional[str] = None
@@ -851,7 +852,7 @@ async def export_index():
                                     ${sentiments.map((s, i) => `
                                         <tr>
                                             <td>${i + 1}</td>
-                                            <td>${getSentimentEmoji(s.sentiment)} ${s.sentiment || '-'}</td>
+                                            <td>${s.sentiment || '-'}</td>
                                             <td>${(s.score || s.value || s.polarity || 0).toFixed(2)}</td>
                                             <td>${s.text || '-'}</td>
                                             <td>${s.userId || '-'}</td>
@@ -891,8 +892,8 @@ async def export_index():
                         
                         // Extract coordinates
                         const coords = gpsData.map(g => {
-                            let lat = g.latitude || g.lat;
-                            let lng = g.longitude || g.lon || g.lng;
+                            let lat = g.lat || g.latitude;
+                            let lng = g.long || g.lng || g.longitude || g.lon;
                             if (g.coords && Array.isArray(g.coords)) {
                                 lat = g.coords[0];
                                 lng = g.coords[1];
@@ -944,8 +945,8 @@ async def export_index():
                                 </thead>
                                 <tbody>
                                     ${gpsData.map((g, i) => {
-                                        let lat = g.latitude || g.lat || '-';
-                                        let lng = g.longitude || g.lon || g.lng || '-';
+                                        let lat = g.lat || g.latitude || '-';
+                                        let lng = g.long || g.lng || g.longitude || g.lon || '-';
                                         if (g.coords && Array.isArray(g.coords)) {
                                             lat = g.coords[0];
                                             lng = g.coords[1];
