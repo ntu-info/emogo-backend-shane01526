@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Body
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ class VlogData(BaseModel):
     video_url: Optional[str] = None
     audio_url: Optional[str] = None
     url: Optional[str] = None
+    vlog: Optional[str] = None
     userId: Optional[str] = None
     timestamp: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -266,7 +267,133 @@ def read_item(item_id: int, q: Optional[str] = None):
     return {"item_id": item_id, "q": q}
 
 
-ALLOWED_EXPORTS = {"vlogs", "sentiments", "gps"}
+@app.get("/export/vlogs")
+async def export_vlogs():
+    """Export all vlogs as JSON"""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not connected")
+    
+    try:
+        cursor = db.vlogs.find({})
+        vlogs = []
+        async for doc in cursor:
+            # Convert ObjectId to string
+            doc['_id'] = str(doc['_id'])
+            vlogs.append(doc)
+        
+        return JSONResponse(
+            content=vlogs,
+            headers={
+                "Content-Disposition": "attachment; filename=vlogs.json"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export vlogs: {str(e)}")
+
+
+@app.get("/export/sentiments")
+async def export_sentiments():
+    """Export all sentiments as JSON"""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not connected")
+    
+    try:
+        cursor = db.sentiments.find({})
+        sentiments = []
+        async for doc in cursor:
+            doc['_id'] = str(doc['_id'])
+            sentiments.append(doc)
+        
+        return JSONResponse(
+            content=sentiments,
+            headers={
+                "Content-Disposition": "attachment; filename=sentiments.json"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export sentiments: {str(e)}")
+
+
+@app.get("/export/gps")
+async def export_gps():
+    """Export all GPS data as JSON"""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not connected")
+    
+    try:
+        cursor = db.gps.find({})
+        gps_data = []
+        async for doc in cursor:
+            doc['_id'] = str(doc['_id'])
+            gps_data.append(doc)
+        
+        return JSONResponse(
+            content=gps_data,
+            headers={
+                "Content-Disposition": "attachment; filename=gps.json"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export GPS data: {str(e)}")
+
+
+@app.get("/export/vlogs/zip")
+async def export_vlogs_zip():
+    """Download all videos as a ZIP file"""
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not connected")
+    
+    try:
+        cursor = db.vlogs.find({})
+        vlogs = []
+        async for doc in cursor:
+            vlogs.append(doc)
+        
+        if not vlogs:
+            raise HTTPException(status_code=404, detail="No vlogs found")
+        
+        # Create ZIP file in memory
+        zip_buffer = BytesIO()
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for idx, vlog in enumerate(vlogs):
+                    # Get video URL from different possible fields
+                    video_url = vlog.get('vlog') or vlog.get('media_url') or vlog.get('video_url') or vlog.get('url')
+                    
+                    if not video_url:
+                        continue
+                    
+                    try:
+                        # Download video
+                        response = await client.get(video_url)
+                        response.raise_for_status()
+                        
+                        # Generate filename
+                        timestamp = vlog.get('timestamp', '')
+                        user_id = vlog.get('userId', 'unknown')
+                        filename = f"vlog_{idx+1}_{user_id}_{timestamp[:10]}.mp4"
+                        
+                        # Add to ZIP
+                        zip_file.writestr(filename, response.content)
+                        
+                    except Exception as e:
+                        print(f"Failed to download video {video_url}: {e}")
+                        continue
+        
+        # Prepare ZIP for download
+        zip_buffer.seek(0)
+        
+        return StreamingResponse(
+            zip_buffer,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": "attachment; filename=vlogs.zip"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create ZIP: {str(e)}")
 
 
 @app.get("/export", response_class=HTMLResponse)
@@ -525,9 +652,9 @@ async def export_index():
             </div>
 
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('vlogs')">🎬 Vlogs</button>
-                <button class="tab" onclick="switchTab('sentiments')">😊 Sentiments</button>
-                <button class="tab" onclick="switchTab('gps')">📍 GPS</button>
+                <button class="tab active" onclick="switchTab('vlogs', event)">🎬 Vlogs</button>
+                <button class="tab" onclick="switchTab('sentiments', event)">😊 Sentiments</button>
+                <button class="tab" onclick="switchTab('gps', event)">📍 GPS</button>
             </div>
 
             <!-- Vlogs Tab -->
@@ -572,7 +699,7 @@ async def export_index():
             let currentTab = 'vlogs';
             let mapInstance = null;
 
-            function switchTab(tabName) {
+            function switchTab(tabName, event) {
                 currentTab = tabName;
                 
                 // Update tab buttons
@@ -628,9 +755,14 @@ async def export_index():
                         }
                         
                         grid.innerHTML = vlogs.map((vlog, idx) => {
-                            const url = vlog.media_url || vlog.video_url || vlog.audio_url || vlog.url;
+                            // Get video URL from different possible fields
+                            const url = vlog.vlog || vlog.media_url || vlog.video_url || vlog.audio_url || vlog.url;
                             const timestamp = vlog.timestamp ? new Date(vlog.timestamp).toLocaleString('zh-TW') : '未知時間';
                             const userId = vlog.userId || '未知使用者';
+                            
+                            if (!url) {
+                                return '';
+                            }
                             
                             return `
                                 <div class="video-card">
