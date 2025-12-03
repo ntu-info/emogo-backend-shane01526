@@ -271,14 +271,15 @@ ALLOWED_EXPORTS = {"vlogs", "sentiments", "gps"}
 
 @app.get("/export", response_class=HTMLResponse)
 async def export_index():
-    """Interactive HTML page with download buttons for all data types."""
+    """Interactive HTML page with data preview and download functionality."""
     html = """
 <!doctype html>
 <html>
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>EmoGo Data Export</title>
+        <title>EmoGo Data Export & Viewer</title>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <style>
             * { box-sizing: border-box; }
             body { 
@@ -289,7 +290,7 @@ async def export_index():
                 min-height: 100vh;
             }
             .container {
-                max-width: 900px;
+                max-width: 1200px;
                 margin: 0 auto;
                 background: white;
                 border-radius: 12px;
@@ -322,35 +323,46 @@ async def export_index():
                 color: #721c24; 
                 border-color: #dc3545;
             }
-            .card {
-                background: #f8f9fa;
-                border-radius: 8px;
-                padding: 24px;
-                margin-bottom: 20px;
-                border: 1px solid #e0e0e0;
-            }
-            .card h2 {
-                margin: 0 0 12px 0;
-                color: #333;
-                font-size: 22px;
+            
+            /* Tab Navigation */
+            .tabs {
                 display: flex;
-                align-items: center;
+                gap: 8px;
+                margin-bottom: 24px;
+                border-bottom: 2px solid #e0e0e0;
             }
-            .card-icon {
-                width: 40px;
-                height: 40px;
-                margin-right: 12px;
-                background: white;
-                border-radius: 8px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 24px;
-            }
-            .card-desc {
+            .tab {
+                padding: 12px 24px;
+                background: transparent;
+                border: none;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: 600;
                 color: #666;
-                margin-bottom: 20px;
-                font-size: 14px;
+                border-bottom: 3px solid transparent;
+                transition: all 0.3s;
+            }
+            .tab:hover {
+                color: #667eea;
+            }
+            .tab.active {
+                color: #667eea;
+                border-bottom-color: #667eea;
+            }
+            
+            .tab-content {
+                display: none;
+            }
+            .tab-content.active {
+                display: block;
+            }
+            
+            /* Download Buttons */
+            .download-section {
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                margin-bottom: 24px;
             }
             .download-btn {
                 display: inline-block;
@@ -362,50 +374,82 @@ async def export_index():
                 font-weight: 600;
                 transition: all 0.3s;
                 margin-right: 12px;
+                margin-bottom: 8px;
                 box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
             }
             .download-btn:hover {
                 transform: translateY(-2px);
                 box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
             }
-            .download-btn.secondary {
-                background: #6c757d;
-                box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+            
+            /* Video Grid */
+            .video-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                gap: 20px;
+                margin-top: 20px;
             }
-            .download-btn.secondary:hover {
-                box-shadow: 0 6px 16px rgba(108, 117, 125, 0.5);
+            .video-card {
+                background: #f8f9fa;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
-            .stats {
-                display: flex;
-                gap: 16px;
-                margin-top: 16px;
+            .video-card video {
+                width: 100%;
+                height: 200px;
+                object-fit: cover;
+                background: #000;
             }
-            .stat-box {
-                flex: 1;
-                background: white;
+            .video-info {
                 padding: 12px;
-                border-radius: 6px;
-                text-align: center;
             }
-            .stat-number {
-                font-size: 24px;
-                font-weight: 700;
-                color: #667eea;
+            .video-info h3 {
+                margin: 0 0 8px 0;
+                font-size: 14px;
+                color: #333;
             }
-            .stat-label {
+            .video-info p {
+                margin: 4px 0;
                 font-size: 12px;
                 color: #666;
-                text-transform: uppercase;
-                margin-top: 4px;
             }
-            .footer {
-                text-align: center;
-                color: #666;
-                margin-top: 32px;
-                padding-top: 24px;
-                border-top: 1px solid #e0e0e0;
-                font-size: 14px;
+            
+            /* Sentiment Chart */
+            #sentimentChart {
+                max-height: 300px;
+                margin: 20px 0;
             }
+            
+            /* Table */
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+                background: white;
+            }
+            th, td {
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            th {
+                background: #f8f9fa;
+                font-weight: 600;
+                color: #333;
+            }
+            tr:hover {
+                background: #f8f9fa;
+            }
+            
+            /* Map */
+            #map {
+                height: 400px;
+                border-radius: 8px;
+                margin: 20px 0;
+            }
+            
+            /* Loading & Empty States */
             .loading {
                 display: inline-block;
                 width: 16px;
@@ -420,223 +464,382 @@ async def export_index():
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
             }
+            .empty-state {
+                text-align: center;
+                padding: 60px 20px;
+                color: #999;
+            }
+            .empty-state-icon {
+                font-size: 64px;
+                margin-bottom: 16px;
+            }
+            
+            /* Stats */
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 16px;
+                margin-bottom: 24px;
+            }
+            .stat-card {
+                background: #f8f9fa;
+                padding: 16px;
+                border-radius: 8px;
+                text-align: center;
+            }
+            .stat-number {
+                font-size: 32px;
+                font-weight: 700;
+                color: #667eea;
+                margin-bottom: 4px;
+            }
+            .stat-label {
+                font-size: 14px;
+                color: #666;
+            }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>🎥 EmoGo Data Export</h1>
-            <div class="subtitle">下載您收集的所有 vlogs、情緒分析和 GPS 資料</div>
+            <h1>🎥 EmoGo Data Viewer</h1>
+            <div class="subtitle">預覽和下載您收集的所有資料</div>
             
             <div id="status" class="status">
-                <span>正在檢查連線狀態...</span>
+                <span>正在載入資料...</span>
                 <div class="loading"></div>
             </div>
 
-            <div class="card">
-                <h2>
-                    <div class="card-icon">🎬</div>
-                    Vlogs (影片檔案)
-                </h2>
-                <div class="card-desc">下載所有錄製的影片檔案，包含完整的 metadata 和媒體內容</div>
-                <div id="vlogStats" class="stats" style="display:none;">
-                    <div class="stat-box">
-                        <div class="stat-number" id="vlogCount">-</div>
-                        <div class="stat-label">影片數量</div>
-                    </div>
+            <div class="stats-grid" id="statsGrid" style="display:none;">
+                <div class="stat-card">
+                    <div class="stat-number" id="vlogCount">0</div>
+                    <div class="stat-label">影片</div>
                 </div>
-                <div style="margin-top: 16px;">
-                    <a href="/export/vlogs/zip" class="download-btn" download>
-                        📦 下載 MP4 影片壓縮檔 (.zip)
-                    </a>
-                    <a href="/export/vlogs" class="download-btn secondary" download>
-                        📄 下載 JSON 資料
-                    </a>
+                <div class="stat-card">
+                    <div class="stat-number" id="sentimentCount">0</div>
+                    <div class="stat-label">情緒記錄</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="gpsCount">0</div>
+                    <div class="stat-label">GPS 點位</div>
                 </div>
             </div>
 
-            <div class="card">
-                <h2>
-                    <div class="card-icon">😊</div>
-                    Sentiments (情緒分析)
-                </h2>
-                <div class="card-desc">下載情緒分析結果，包含分數、情緒類型和時間戳記</div>
-                <div id="sentimentStats" class="stats" style="display:none;">
-                    <div class="stat-box">
-                        <div class="stat-number" id="sentimentCount">-</div>
-                        <div class="stat-label">記錄數量</div>
-                    </div>
-                </div>
-                <div style="margin-top: 16px;">
-                    <a href="/export/sentiments" class="download-btn" download>
-                        📊 下載情緒資料 (.json)
-                    </a>
-                </div>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('vlogs')">🎬 Vlogs</button>
+                <button class="tab" onclick="switchTab('sentiments')">😊 Sentiments</button>
+                <button class="tab" onclick="switchTab('gps')">📍 GPS</button>
             </div>
 
-            <div class="card">
-                <h2>
-                    <div class="card-icon">📍</div>
-                    GPS (位置座標)
-                </h2>
-                <div class="card-desc">下載所有 GPS 位置記錄，包含經緯度和準確度資訊</div>
-                <div id="gpsStats" class="stats" style="display:none;">
-                    <div class="stat-box">
-                        <div class="stat-number" id="gpsCount">-</div>
-                        <div class="stat-label">位置點數</div>
-                    </div>
+            <!-- Vlogs Tab -->
+            <div id="vlogs-content" class="tab-content active">
+                <div class="download-section">
+                    <h3 style="margin:0 0 12px 0;">📥 下載選項</h3>
+                    <a href="/export/vlogs/zip" class="download-btn">📦 下載影片 ZIP</a>
+                    <a href="/export/vlogs" class="download-btn">📄 下載 JSON</a>
                 </div>
-                <div style="margin-top: 16px;">
-                    <a href="/export/gps" class="download-btn" download>
-                        🗺️ 下載 GPS 資料 (.json)
-                    </a>
-                </div>
+                <h3>影片預覽</h3>
+                <div id="vlogsGrid" class="video-grid"></div>
             </div>
 
-            <div class="footer">
-                <p>💡 提示：ZIP 檔案包含所有影片和完整的 manifest.json</p>
-                <p>如有問題，請聯繫系統管理員</p>
+            <!-- Sentiments Tab -->
+            <div id="sentiments-content" class="tab-content">
+                <div class="download-section">
+                    <h3 style="margin:0 0 12px 0;">📥 下載選項</h3>
+                    <a href="/export/sentiments" class="download-btn">📊 下載情緒資料</a>
+                </div>
+                <h3>情緒分析圖表</h3>
+                <canvas id="sentimentChart"></canvas>
+                <h3>情緒記錄</h3>
+                <div id="sentimentsTable"></div>
+            </div>
+
+            <!-- GPS Tab -->
+            <div id="gps-content" class="tab-content">
+                <div class="download-section">
+                    <h3 style="margin:0 0 12px 0;">📥 下載選項</h3>
+                    <a href="/export/gps" class="download-btn">🗺️ 下載 GPS 資料</a>
+                </div>
+                <h3>位置地圖</h3>
+                <div id="map"></div>
+                <h3>GPS 記錄</h3>
+                <div id="gpsTable"></div>
             </div>
         </div>
 
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
-            // Check backend status and display stats
+            let currentTab = 'vlogs';
+            let mapInstance = null;
+
+            function switchTab(tabName) {
+                currentTab = tabName;
+                
+                // Update tab buttons
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                event.target.classList.add('active');
+                
+                // Update content
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById(tabName + '-content').classList.add('active');
+                
+                // Initialize map if switching to GPS tab
+                if (tabName === 'gps' && !mapInstance) {
+                    loadGPSData();
+                }
+            }
+
+            // Check backend status
             fetch('/').then(r => r.json()).then(data => {
                 const statusDiv = document.getElementById('status');
                 if (data.status === 'ok') {
                     statusDiv.className = 'status ok';
-                    statusDiv.innerHTML = '✅ 後端已連接到資料庫';
+                    statusDiv.innerHTML = '✅ 資料庫連接成功';
                     
                     // Show stats
                     if (data.collections) {
-                        if (data.collections.vlogs !== undefined) {
-                            document.getElementById('vlogStats').style.display = 'flex';
-                            document.getElementById('vlogCount').textContent = data.collections.vlogs;
-                        }
-                        if (data.collections.sentiments !== undefined) {
-                            document.getElementById('sentimentStats').style.display = 'flex';
-                            document.getElementById('sentimentCount').textContent = data.collections.sentiments;
-                        }
-                        if (data.collections.gps !== undefined) {
-                            document.getElementById('gpsStats').style.display = 'flex';
-                            document.getElementById('gpsCount').textContent = data.collections.gps;
-                        }
+                        document.getElementById('statsGrid').style.display = 'grid';
+                        document.getElementById('vlogCount').textContent = data.collections.vlogs || 0;
+                        document.getElementById('sentimentCount').textContent = data.collections.sentiments || 0;
+                        document.getElementById('gpsCount').textContent = data.collections.gps || 0;
                     }
+                    
+                    // Load data
+                    loadVlogs();
+                    loadSentiments();
                 } else {
                     statusDiv.className = 'status error';
-                    statusDiv.innerHTML = '❌ 資料庫未連接<br>' + 
-                        '<small>錯誤: ' + (data.error || data.note || '未知錯誤') + '</small>';
+                    statusDiv.innerHTML = '❌ 資料庫連接失敗<br><small>' + (data.error || data.note || '') + '</small>';
                 }
             }).catch(e => {
-                const statusDiv = document.getElementById('status');
-                statusDiv.innerHTML = '❌ 無法連接到後端: ' + e.message;
-                statusDiv.className = 'status error';
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = '❌ 無法連接後端';
             });
+
+            // Load Vlogs
+            function loadVlogs() {
+                fetch('/export/vlogs')
+                    .then(r => r.json())
+                    .then(vlogs => {
+                        const grid = document.getElementById('vlogsGrid');
+                        if (!vlogs || vlogs.length === 0) {
+                            grid.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📹</div><p>尚無影片資料</p></div>';
+                            return;
+                        }
+                        
+                        grid.innerHTML = vlogs.map((vlog, idx) => {
+                            const url = vlog.media_url || vlog.video_url || vlog.audio_url || vlog.url;
+                            const timestamp = vlog.timestamp ? new Date(vlog.timestamp).toLocaleString('zh-TW') : '未知時間';
+                            const userId = vlog.userId || '未知使用者';
+                            
+                            return `
+                                <div class="video-card">
+                                    <video controls>
+                                        <source src="${url}" type="video/mp4">
+                                        您的瀏覽器不支援影片播放
+                                    </video>
+                                    <div class="video-info">
+                                        <h3>影片 #${idx + 1}</h3>
+                                        <p>👤 ${userId}</p>
+                                        <p>🕐 ${timestamp}</p>
+                                        ${vlog.metadata && vlog.metadata.description ? `<p>📝 ${vlog.metadata.description}</p>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    })
+                    .catch(e => {
+                        document.getElementById('vlogsGrid').innerHTML = '<div class="empty-state"><p>載入失敗: ' + e.message + '</p></div>';
+                    });
+            }
+
+            // Load Sentiments
+            function loadSentiments() {
+                fetch('/export/sentiments')
+                    .then(r => r.json())
+                    .then(sentiments => {
+                        const table = document.getElementById('sentimentsTable');
+                        
+                        if (!sentiments || sentiments.length === 0) {
+                            table.innerHTML = '<div class="empty-state"><div class="empty-state-icon">😶</div><p>尚無情緒資料</p></div>';
+                            return;
+                        }
+                        
+                        // Create chart
+                        const labels = sentiments.map((s, i) => {
+                            if (s.timestamp) {
+                                return new Date(s.timestamp).toLocaleString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            }
+                            return '#' + (i + 1);
+                        });
+                        const scores = sentiments.map(s => s.score || s.value || s.polarity || 0);
+                        
+                        const ctx = document.getElementById('sentimentChart').getContext('2d');
+                        new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: '情緒分數',
+                                    data: scores,
+                                    borderColor: '#667eea',
+                                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                plugins: {
+                                    legend: { display: true }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: false
+                                    }
+                                }
+                            }
+                        });
+                        
+                        // Create table
+                        const tableHTML = `
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>情緒</th>
+                                        <th>分數</th>
+                                        <th>文字內容</th>
+                                        <th>使用者</th>
+                                        <th>時間</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${sentiments.map((s, i) => `
+                                        <tr>
+                                            <td>${i + 1}</td>
+                                            <td>${getSentimentEmoji(s.sentiment)} ${s.sentiment || '-'}</td>
+                                            <td>${(s.score || s.value || s.polarity || 0).toFixed(2)}</td>
+                                            <td>${s.text || '-'}</td>
+                                            <td>${s.userId || '-'}</td>
+                                            <td>${s.timestamp ? new Date(s.timestamp).toLocaleString('zh-TW') : '-'}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        `;
+                        table.innerHTML = tableHTML;
+                    })
+                    .catch(e => {
+                        document.getElementById('sentimentsTable').innerHTML = '<div class="empty-state"><p>載入失敗: ' + e.message + '</p></div>';
+                    });
+            }
+
+            function getSentimentEmoji(sentiment) {
+                const s = (sentiment || '').toLowerCase();
+                if (s.includes('positive') || s.includes('happy') || s.includes('joy')) return '😊';
+                if (s.includes('negative') || s.includes('sad') || s.includes('angry')) return '😢';
+                return '😐';
+            }
+
+            // Load GPS
+            function loadGPSData() {
+                fetch('/export/gps')
+                    .then(r => r.json())
+                    .then(gpsData => {
+                        const table = document.getElementById('gpsTable');
+                        const mapDiv = document.getElementById('map');
+                        
+                        if (!gpsData || gpsData.length === 0) {
+                            table.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📍</div><p>尚無 GPS 資料</p></div>';
+                            mapDiv.innerHTML = '<div class="empty-state"><p>無位置資料可顯示</p></div>';
+                            return;
+                        }
+                        
+                        // Extract coordinates
+                        const coords = gpsData.map(g => {
+                            let lat = g.latitude || g.lat;
+                            let lng = g.longitude || g.lon || g.lng;
+                            if (g.coords && Array.isArray(g.coords)) {
+                                lat = g.coords[0];
+                                lng = g.coords[1];
+                            }
+                            return { lat, lng, data: g };
+                        }).filter(c => c.lat && c.lng);
+                        
+                        if (coords.length === 0) {
+                            mapDiv.innerHTML = '<div class="empty-state"><p>GPS 資料格式不正確</p></div>';
+                        } else {
+                            // Initialize map
+                            mapInstance = L.map('map').setView([coords[0].lat, coords[0].lng], 13);
+                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                maxZoom: 19,
+                                attribution: '© OpenStreetMap'
+                            }).addTo(mapInstance);
+                            
+                            // Add markers
+                            coords.forEach((c, i) => {
+                                const marker = L.marker([c.lat, c.lng]).addTo(mapInstance);
+                                const timestamp = c.data.timestamp ? new Date(c.data.timestamp).toLocaleString('zh-TW') : '未知時間';
+                                marker.bindPopup(`
+                                    <strong>位置 #${i + 1}</strong><br>
+                                    經度: ${c.lng.toFixed(6)}<br>
+                                    緯度: ${c.lat.toFixed(6)}<br>
+                                    時間: ${timestamp}
+                                `);
+                            });
+                            
+                            // Fit bounds
+                            if (coords.length > 1) {
+                                const bounds = L.latLngBounds(coords.map(c => [c.lat, c.lng]));
+                                mapInstance.fitBounds(bounds);
+                            }
+                        }
+                        
+                        // Create table
+                        const tableHTML = `
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>緯度</th>
+                                        <th>經度</th>
+                                        <th>準確度</th>
+                                        <th>使用者</th>
+                                        <th>時間</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${gpsData.map((g, i) => {
+                                        let lat = g.latitude || g.lat || '-';
+                                        let lng = g.longitude || g.lon || g.lng || '-';
+                                        if (g.coords && Array.isArray(g.coords)) {
+                                            lat = g.coords[0];
+                                            lng = g.coords[1];
+                                        }
+                                        return `
+                                        <tr>
+                                            <td>${i + 1}</td>
+                                            <td>${typeof lat === 'number' ? lat.toFixed(6) : lat}</td>
+                                            <td>${typeof lng === 'number' ? lng.toFixed(6) : lng}</td>
+                                            <td>${g.accuracy ? g.accuracy.toFixed(2) + 'm' : '-'}</td>
+                                            <td>${g.userId || '-'}</td>
+                                            <td>${g.timestamp ? new Date(g.timestamp).toLocaleString('zh-TW') : '-'}</td>
+                                        </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        `;
+                        table.innerHTML = tableHTML;
+                    })
+                    .catch(e => {
+                        document.getElementById('gpsTable').innerHTML = '<div class="empty-state"><p>載入失敗: ' + e.message + '</p></div>';
+                    });
+            }
         </script>
     </body>
 </html>
     """
     return HTMLResponse(content=html)
-
-
-@app.get("/export/vlogs/zip")
-async def export_vlogs_zip():
-    """Download a ZIP archive containing all media files and a manifest."""
-    if db is None:
-        raise HTTPException(status_code=503, detail="Database not connected")
-
-    docs = await db['vlogs'].find({}).to_list(length=None)
-
-    buf = BytesIO()
-    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        # Write manifest
-        try:
-            manifest_data = json.dumps(docs, default=str, indent=2)
-            zf.writestr('manifest.json', manifest_data)
-        except Exception as e:
-            zf.writestr('manifest.json', f'{{"error": "Failed to create manifest", "details": "{str(e)}"}}')
-
-        # Download and add media files
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-            for idx, doc in enumerate(docs, start=1):
-                # Try to find media URL
-                url = None
-                for k in ('media_url', 'video_url', 'audio_url', 'url'):
-                    if isinstance(doc.get(k), str) and doc.get(k).strip():
-                        url = doc.get(k).strip()
-                        break
-                
-                if not url:
-                    continue
-                
-                try:
-                    print(f"Downloading media {idx}/{len(docs)}: {url}")
-                    resp = await client.get(url)
-                    
-                    if resp.status_code == 200:
-                        # Generate filename
-                        parts = url.split('?')[0].split('/')
-                        fname = parts[-1] if parts[-1] else f'media_{idx}'
-                        
-                        # Ensure extension
-                        if '.' not in fname:
-                            fname += '.mp4'
-                        
-                        # Clean filename
-                        fname = fname.replace('\n', '_').replace('\r', '_').replace('/', '_').replace('\\', '_')
-                        
-                        # Add timestamp to avoid duplicates
-                        timestamp = doc.get('timestamp', '').replace(':', '-').replace('.', '-')[:19]
-                        if timestamp:
-                            name_parts = fname.rsplit('.', 1)
-                            fname = f"{name_parts[0]}_{timestamp}.{name_parts[1]}" if len(name_parts) == 2 else f"{fname}_{timestamp}"
-                        
-                        zf.writestr(f"videos/{fname}", resp.content)
-                        print(f"✓ Added {fname} ({len(resp.content)} bytes)")
-                    else:
-                        print(f"✗ Failed to download {url}: HTTP {resp.status_code}")
-                        
-                except Exception as e:
-                    print(f"✗ Error downloading {url}: {str(e)}")
-                    continue
-
-    buf.seek(0)
-    headers = {
-        "Content-Disposition": 'attachment; filename="emogo_vlogs.zip"',
-        "Content-Type": "application/zip"
-    }
-    return StreamingResponse(buf, media_type='application/zip', headers=headers)
-
-
-def _make_serializable(doc: dict) -> dict:
-    """Convert ObjectId and other non-serializable types to strings"""
-    out = {}
-    for k, v in doc.items():
-        try:
-            json.dumps(v)
-            out[k] = v
-        except Exception:
-            out[k] = str(v)
-    return out
-
-
-@app.get("/export/{kind}")
-async def export_kind(kind: str):
-    """Return all documents from the named collection as a downloadable JSON file."""
-    if kind not in ALLOWED_EXPORTS:
-        raise HTTPException(status_code=404, detail="Unknown export kind")
-    if db is None:
-        raise HTTPException(status_code=503, detail="Database not connected")
-
-    try:
-        cursor = db[kind].find({})
-        docs = await cursor.to_list(length=None)
-        docs = [_make_serializable(d) for d in docs]
-        content = json.dumps(docs, default=str, indent=2)
-        filename = f"emogo_{kind}.json"
-        headers = {
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Type": "application/json"
-        }
-        return Response(content, media_type="application/json", headers=headers)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to export {kind}: {str(e)}")
