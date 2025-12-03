@@ -806,8 +806,13 @@ async def export_index():
                             return '#' + (i + 1);
                         });
                         const scores = sentiments.map(s => {
-                            const score = s.score || s.value || s.polarity || 0;
-                            return typeof score === 'number' ? score : 0;
+                            let score = s.score || s.value || s.polarity || 0;
+                            // 如果是字串，強制轉換為數字
+                            if (typeof score === 'string') {
+                                score = parseFloat(score);
+                            }
+                            // 確保是有效數字
+                            return typeof score === 'number' && !isNaN(score) ? score : 0;
                         });
                         
                         const ctx = document.getElementById('sentimentChart').getContext('2d');
@@ -853,8 +858,12 @@ async def export_index():
                                 </thead>
                                 <tbody>
                                     ${sentiments.map((s, i) => {
-                                        const score = s.score || s.value || s.polarity || 0;
-                                        const scoreStr = typeof score === 'number' ? score.toFixed(2) : score;
+                                        let score = s.score || s.value || s.polarity || 0;
+                                        // 如果是字串，強制轉換為數字
+                                        if (typeof score === 'string') {
+                                            score = parseFloat(score);
+                                        }
+                                        const scoreStr = typeof score === 'number' && !isNaN(score) ? score.toFixed(2) : '-';
                                         return `
                                         <tr>
                                             <td>${i + 1}</td>
