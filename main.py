@@ -42,7 +42,7 @@ class VlogData(BaseModel):
 
 class SentimentData(BaseModel):
     score: Optional[float] = None
-    sentiment: Optional[str] = None
+    mood: Optional[str] = None
     value: Optional[float] = None
     polarity: Optional[float] = None
     userId: Optional[str] = None
