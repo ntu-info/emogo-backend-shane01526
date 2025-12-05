@@ -34,7 +34,7 @@ The EmoGo backend exposes a data-export page that lets TAs and Tren view and dow
 
 - **Export page (will be assigned by Render after deployment):**
 
-    `https://<your-render-service>.onrender.com/export`
+    `https://emogo-backend-shane01526.onrender.com/export`
 
 - **Direct download endpoints (replace the host with your service domain):**
     - `/export/vlogs` — downloads `vlogs.json`
