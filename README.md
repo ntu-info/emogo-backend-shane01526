@@ -44,7 +44,8 @@ The EmoGo backend exposes a data-export page that lets TAs and Tren view and dow
 Each endpoint returns a JSON array of documents from the corresponding MongoDB collection. Example curl command to download the vlogs file (saves with the server-provided filename):
 
 ```powershell
-curl -O -J https://<your-render-service>.onrender.com/export/vlogs
+curl -O -J https://emogo-backend-shane01526.onrender.com/export
+
 ```
 
 Deploying on Render
